@@ -91,7 +91,7 @@ class StateManager : Callable<void> {
     }
 
 public:
-    StateManager(State * start_state) : _current_state(start_state), _mutex() {}
+    StateManager(std::unique_ptr<State> start_state) : _current_state(std::move(start_state)), _mutex() {}
 
     std::string getStateName() const {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -120,7 +120,7 @@ public:
 };
 
 int main() {
-    StateManager state_manager(new StartState);
+    StateManager state_manager(std::unique_ptr<State>(new StartState));
     std::thread thread(&StateManager::run, &state_manager);
     while(state_manager.isRunning()) {
         std::cout << state_manager.getStateName() << std::endl;
