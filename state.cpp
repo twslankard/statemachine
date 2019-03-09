@@ -1,12 +1,10 @@
+#include <chrono>
 #include <mutex>
 #include <thread>
 #include <unistd.h>
 #include <iostream>
 #include "Immutable.h"
 
-struct NotImplementedException : public std::logic_error {
-    NotImplementedException () : std::logic_error("Function not yet implemented.") {}
-};
 
 struct StateName : ImmutableString<StateName> {
     StateName(const std::string & name) : ImmutableString(name) {} 
@@ -20,17 +18,13 @@ struct Callable {
 struct State;
 typedef std::shared_ptr<State> NextState;
 
-class State : Callable<NextState> {
+class State : public Callable<NextState> {
 
     const StateName _name; 
 
 public:
     State(StateName name) : _name(name) {}
     State(const std::string & name) : _name(name) {}
-
-    virtual NextState run(void) {
-       throw NotImplementedException(); 
-    };
 
     virtual bool isTerminalState() const {
         return false;
@@ -43,14 +37,15 @@ public:
 
 struct EndState : public State {
     EndState() : State("EndState") {}
-    bool isTerminalState() const { return true; }
+    NextState run(void) override { return nullptr; }
+    bool isTerminalState() const override { return true; }
 };
 
 struct BarState : public State {
     BarState() : State("BarState") {}
-    NextState run() {
+    NextState run() override {
         std::cout << "Now in " << getName() << std::endl;
-        sleep(2);
+        std::this_thread::sleep_for(std::chrono::seconds(1)); 
         throw std::runtime_error("oopsie!");
         return NextState(new EndState());
     }
@@ -58,9 +53,9 @@ struct BarState : public State {
 
 struct FooState : public State {
     FooState() : State("FooState") {}
-    NextState run() {
+    NextState run() override {
         std::cout << "Now in " << getName() << std::endl;
-        sleep(2);
+        std::this_thread::sleep_for(std::chrono::seconds(1)); 
         std::cout << "Going to BarState" << std::endl;
         return NextState(new BarState());
     }
@@ -68,9 +63,9 @@ struct FooState : public State {
 
 struct StartState : public State {
     StartState() : State("StartState") {}
-    NextState run() {
+    NextState run() override {
         std::cout << "Now in " << getName() << std::endl;
-        sleep(2);
+        std::this_thread::sleep_for(std::chrono::seconds(1)); 
         std::cout << "Going to FooState" << std::endl;
         return NextState(new FooState());
     }
@@ -78,7 +73,8 @@ struct StartState : public State {
 
 struct AbortState : public State {
     AbortState() : State("AbortState") {}
-    bool isTerminalState() const { 
+    NextState run(void) override { return nullptr; }
+    bool isTerminalState() const override { 
         std::cout << "AbortState::isTerminalState() " << std::endl;
         return true;
     }
@@ -87,25 +83,26 @@ struct AbortState : public State {
 class StateManager : Callable<void> {
 
     NextState _current_state;
-    std::mutex _mutex;
-
-public:
-    StateManager(State * start_state) : _current_state(start_state), _mutex() {}
-
-    std::string getStateName() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return std::string(_current_state->getName().getValue());
-    }
-
-    bool isRunning() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return !_current_state->isTerminalState();
-    }
+    mutable std::mutex _mutex;
 
     void setCurrentState(NextState next) {
         std::lock_guard<std::mutex> lock(_mutex);
         _current_state = next;
     }
+
+public:
+    StateManager(State * start_state) : _current_state(start_state), _mutex() {}
+
+    std::string getStateName() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return std::string(_current_state->getName().getValue());
+    }
+
+    bool isRunning() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return !_current_state->isTerminalState();
+    }
+
 
     void run(void) {
         while(isRunning()) {
@@ -127,7 +124,7 @@ int main() {
     std::thread thread(&StateManager::run, &state_manager);
     while(state_manager.isRunning()) {
         std::cout << state_manager.getStateName() << std::endl;
-        usleep(250000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250)); 
     }
     thread.join();
 }
