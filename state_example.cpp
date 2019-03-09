@@ -1,8 +1,8 @@
 #include <chrono>
 #include <thread>
 #include <iostream>
-#include "State.h"
-#include "StateManager.h"
+#include <state/State.h>
+#include <state/StateManager.h>
 
 struct EndState : public State {
     EndState() : State("EndState") {}
