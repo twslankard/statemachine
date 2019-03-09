@@ -1,70 +1,15 @@
-#include <atomic>
 #include <mutex>
 #include <thread>
-#include <cstdlib>
 #include <unistd.h>
 #include <iostream>
-#include <memory>
-#include <string>
+#include "Immutable.h"
 
-template<typename T>
-class AbstractImmutable {
-    private:
-        const T _value;
-    public:
-        AbstractImmutable(const T & value) : _value(value) {}
-        const T & getValue() const { return _value; }
-
-        inline friend bool operator<(const AbstractImmutable<T> & a, const AbstractImmutable<T> & b) {
-            return a.getValue() < b.getValue();
-        }
-
-        inline friend bool operator>(const AbstractImmutable<T> & a, const AbstractImmutable<T> & b) {
-            return a.getValue() > b.getValue();
-        }
-
-        inline friend bool operator==(const AbstractImmutable<T> & a, const AbstractImmutable<T> & b) {
-            return a.getValue() == b.getValue();
-        }
-
-        const AbstractImmutable<T> operator+(const AbstractImmutable<T> & that) const {
-            return AbstractImmutable<T>(getValue() + that.getValue());
-        }
-
-        const AbstractImmutable<T> operator-(const AbstractImmutable<T> & that) const {
-            return AbstractImmutable<T>(getValue() - that.getValue());
-        }
-
-        const AbstractImmutable<T> operator/(const AbstractImmutable<T> & that) const {
-            return AbstractImmutable<T>(getValue() / that.getValue());
-        }
-
-        const AbstractImmutable<T> operator*(const AbstractImmutable<T> & that) const {
-            return AbstractImmutable<T>(getValue() * that.getValue());
-        }
-
-        inline friend std::ostream & operator<<(std::ostream & out, const AbstractImmutable<T> & that) {
-            out << that.getValue();
-            return out;
-        }
-};
-
-template<typename T>
-class ImmutableString : public AbstractImmutable<std::string> {
-    using AbstractImmutable::AbstractImmutable;
-};
-
-
-
-struct NotImplementedException : public std::logic_error
-{
+struct NotImplementedException : public std::logic_error {
     NotImplementedException () : std::logic_error("Function not yet implemented.") {}
 };
 
 struct StateName : ImmutableString<StateName> {
-    StateName(const std::string & name) : ImmutableString(name) {
-    
-    } 
+    StateName(const std::string & name) : ImmutableString(name) {} 
 };
 
 template <typename T>
@@ -73,20 +18,15 @@ struct Callable {
 };
 
 struct State;
-
 typedef std::shared_ptr<State> NextState;
 
-struct State : Callable<NextState> {
+class State : Callable<NextState> {
 
     const StateName _name; 
 
-    State(StateName name) : _name(name) {
-
-    }
-
-    State(const std::string & name) : _name(name) {
-
-    }
+public:
+    State(StateName name) : _name(name) {}
+    State(const std::string & name) : _name(name) {}
 
     virtual NextState run(void) {
        throw NotImplementedException(); 
@@ -109,7 +49,7 @@ struct EndState : public State {
 struct BarState : public State {
     BarState() : State("BarState") {}
     NextState run() {
-        std::cout << getName() << std::endl;
+        std::cout << "Now in " << getName() << std::endl;
         sleep(2);
         throw std::runtime_error("oopsie!");
         return NextState(new EndState());
@@ -119,18 +59,15 @@ struct BarState : public State {
 struct FooState : public State {
     FooState() : State("FooState") {}
     NextState run() {
-        std::cout << getName() << std::endl;
+        std::cout << "Now in " << getName() << std::endl;
         sleep(2);
         std::cout << "Going to BarState" << std::endl;
         return NextState(new BarState());
     }
 };
 
-
-
 struct StartState : public State {
     StartState() : State("StartState") {}
-
     NextState run() {
         std::cout << "Now in " << getName() << std::endl;
         sleep(2);
@@ -147,12 +84,13 @@ struct AbortState : public State {
     }
 };
 
-struct StateManager : Callable<void> {
+class StateManager : Callable<void> {
+
     NextState _current_state;
     std::mutex _mutex;
-    std::string _state_name;
-    StateManager(State * start_state) : _current_state(start_state), _mutex() {
-    }
+
+public:
+    StateManager(State * start_state) : _current_state(start_state), _mutex() {}
 
     std::string getStateName() {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -161,7 +99,6 @@ struct StateManager : Callable<void> {
 
     bool isRunning() {
         std::lock_guard<std::mutex> lock(_mutex);
-        std::cout << "isRunning: " << _current_state->getName() << " " << (!_current_state->isTerminalState()) << std::endl;;
         return !_current_state->isTerminalState();
     }
 
@@ -186,13 +123,11 @@ struct StateManager : Callable<void> {
 };
 
 int main() {
-
     StateManager state_manager(new StartState);
-
     std::thread thread(&StateManager::run, &state_manager);
     while(state_manager.isRunning()) {
         std::cout << state_manager.getStateName() << std::endl;
-        usleep(500000);
+        usleep(250000);
     }
     thread.join();
 }
